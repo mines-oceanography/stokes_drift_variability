@@ -25,13 +25,15 @@ def main():
     # Open WW3 output
     ds = xr.open_dataset(input_file)
 
+    print(f"Computing statistics; this make take a moment (parallelize me!)")
+    
     # Compute current statistics
     stats = compute_for_ds(
         ds,
         u_name="ucur",
         v_name="vcur",
-        lat_name="lat",
-        lon_name="lon",
+        lat_name="latitude",
+        lon_name="longitude",
     )
 
     # Save
