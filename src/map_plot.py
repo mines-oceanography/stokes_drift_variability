@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from matplotlib.patches import Circle, FancyArrow, Rectangle
+from matplotlib.ticker import FuncFormatter
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
@@ -110,6 +111,12 @@ _COLORBAR_INCHES = {
 def subset(ds, timestep, lons, lats):
     return ds.sel(time=timestep, longitude=lons, latitude=lats)
 
+def decimal_centered(x, pos):
+    s = f"{x:g}"
+    if x < 0:
+        s += "\u2007"   # invisible figure space
+    return s
+
 def _format_lon_labels(lons: Sequence[float]) -> list[str]:
     degree = "\N{DEGREE SIGN}"
     labels = []
@@ -176,7 +183,7 @@ def _add_colorbar(mappable, ax, *, label: str, ticks: Sequence[float]) -> None:
     cbar.set_label(label, fontsize=9, labelpad=2)
     cbar.ax.tick_params(labelsize=8)
     cbar.ax.tick_params(which="minor", bottom=False, top=False)
-
+    cbar.ax.xaxis.set_major_formatter(FuncFormatter(decimal_centered))
 
 def _format_map_axis(
     ax,
