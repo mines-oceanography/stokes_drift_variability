@@ -1,0 +1,14 @@
+font.size: 11
+font.weight: bold
+
+axes.labelsize: 11
+axes.labelweight: bold
+axes.titlesize: 11
+axes.titleweight: bold
+
+xtick.labelsize: 9
+ytick.labelsize: 9
+
+legend.fontsize: 9
+
+axes.linewidth: 0.8
