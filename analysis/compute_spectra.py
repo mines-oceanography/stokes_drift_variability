@@ -5,6 +5,7 @@ import sys
 import gc
 
 import xarray as xr
+import numpy as np
 
 
 # ---------------------------------------------------------------------
@@ -25,8 +26,8 @@ INPUT_DIR = PROJECT_ROOT / "data" / "regridded"
 OUTPUT_DIR = PROJECT_ROOT / "data" / "spectra"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-TIME_START = "2020-02-01"
-TIME_END = "2021-03-01"  # exclusive
+TIME_START = np.datetime64("2020-02-01")
+TIME_END = np.datetime64("2021-03-01")
 
 TIME_BLOCK = 168
 
@@ -52,7 +53,7 @@ def main():
 
         print(f"\nWorking on {input_path.name}")
 
-        ds = xr.open_zarr(input_path, chunks={})
+        ds = xr.open_zarr(input_path, chunks={}, consolidated=False)
 
         # Restrict all experiments to the common analysis period.
         ds = ds.sel(
