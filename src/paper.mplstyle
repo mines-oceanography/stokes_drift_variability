@@ -9,6 +9,6 @@ axes.titleweight: bold
 xtick.labelsize: 9
 ytick.labelsize: 9
 
-legend.fontsize: 9
+legend.fontsize: 11
 
 axes.linewidth: 0.8
