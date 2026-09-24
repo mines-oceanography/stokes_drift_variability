@@ -2,3 +2,4 @@ data/raw_ww3
 src/__pycache__
 data/aux
 data/regridded
+data/spectra
