@@ -889,10 +889,194 @@ def add_box_to_axis(
     ax.add_patch(box)
     return box
 
+def make_four_panel_money_figure(
+    four_panel_rows: Sequence[Sequence[Mapping[str, Any]]],
+    *,
+    ranges: Mapping[str, Mapping[str, Any]],
+    column_titles: Sequence[str] | None = None,
+    field_styles: Mapping[str, Mapping[str, Any]] | None = None,
+    projection=None,
+    data_crs=None,
+    lon_ticks: Sequence[float] = tuple(np.arange(-140, -119, 5)),
+    lat_ticks: Sequence[float] = tuple(np.arange(30, 46, 5)),
+    extent: Sequence[float] | None = None,
+    dpi: int = 500,
+    hspace: float = 0,
+    wspace: float = 0.15,
+):
+    """
+    Create a figure containing only four-panel rows.
+
+    Each panel dictionary requires:
+        - "data"
+        - "style"
+
+    Optional panel entries:
+        - "range_key"
+        - "extent"
+
+    Parameters
+    ----------
+    four_panel_rows : sequence of rows
+        Each row must contain exactly 4 panel dictionaries.
+
+    ranges : mapping
+        Dictionary of contour levels/ticks keyed by range name.
+
+    column_titles : sequence of str, optional
+        Length-4 sequence of titles to apply only to the top row.
+    """
+
+    n_rows = len(four_panel_rows)
+
+    if n_rows not in (1, 2, 3):
+        raise ValueError(
+            "four_panel_rows must contain exactly one, two, or three rows"
+        )
+
+    if any(len(row) != 4 for row in four_panel_rows):
+        raise ValueError("each row must contain exactly four panels")
+
+    if column_titles is not None and len(column_titles) != 4:
+        raise ValueError("column_titles must contain exactly four titles")
+
+    if projection is None:
+        projection = ccrs.PlateCarree()
+
+    if data_crs is None:
+        data_crs = ccrs.PlateCarree()
+
+    styles = FIELD_STYLES if field_styles is None else field_styles
+
+    # ---------------------------------------------------------
+    # Figure size
+    # ---------------------------------------------------------
+
+    if n_rows == 1:
+        figsize = (12, 4.0)
+    elif n_rows == 2:
+        figsize = (12, 7.0)
+    else:
+        figsize = (12, 10.0)
+
+    fig = plt.figure(figsize=figsize, dpi=dpi)
+
+    # ---------------------------------------------------------
+    # One simple grid: n_rows x 4
+    # ---------------------------------------------------------
+
+    grid = fig.add_gridspec(
+        nrows=n_rows,
+        ncols=4,
+        hspace=hspace,
+        wspace=wspace,
+    )
+
+    axes = [
+        [
+            fig.add_subplot(grid[row, col], projection=projection)
+            for col in range(4)
+        ]
+        for row in range(n_rows)
+    ]
+
+    # ---------------------------------------------------------
+    # Plot panels
+    # ---------------------------------------------------------
+
+    mappables = []
+    letter_iter = iter(ascii_lowercase)
+
+    for row_index, (axes_row, panel_row) in enumerate(zip(axes, four_panel_rows)):
+
+        for col_index, (ax, panel) in enumerate(zip(axes_row, panel_row)):
+
+            # Required panel entries
+            for key in ("data", "style"):
+                if key not in panel:
+                    raise KeyError(
+                        f"panel at row {row_index}, column {col_index} "
+                        f"is missing '{key}'"
+                    )
+
+            style_key = panel["style"]
+            range_key = panel.get("range_key", style_key)
+
+            try:
+                style = styles[style_key]
+            except KeyError as exc:
+                raise KeyError(f"unknown style '{style_key}'") from exc
+
+            try:
+                range_spec = ranges[range_key]
+            except KeyError as exc:
+                raise KeyError(f"unknown range '{range_key}'") from exc
+
+            levels = np.asarray(range_spec["levels"], dtype=float)
+            ticks = np.asarray(range_spec["ticks"], dtype=float)
+
+            mappable = panel["data"].plot.contourf(
+                ax=ax,
+                transform=data_crs,
+                cmap=style["cmap"],
+                levels=levels,
+                extend=range_spec.get("extend", "both"),
+                add_colorbar=False,
+                add_labels=False,
+            )
+
+            # Longitude labels only on bottom row
+            show_lon = row_index == n_rows - 1
+
+            # Latitude labels only on left column
+            show_lat = col_index == 0
+
+            _format_map_axis(
+                ax,
+                next(letter_iter),
+                projection=projection,
+                lon_ticks=lon_ticks,
+                lat_ticks=lat_ticks,
+                extent=panel.get("extent", extent),
+                show_lon_labels=show_lon,
+                show_lat_labels=show_lat,
+            )
+
+            # Titles only on the top row
+            if row_index == 0 and column_titles is not None:
+                ax.set_title(column_titles[col_index])
+            else:
+                ax.set_title("")
+
+            mappables.append(
+                (mappable, ax, style["colorbar_label"], ticks)
+            )
+
+    # ---------------------------------------------------------
+    # Let Cartopy finalize axes before positioning colorbars
+    # ---------------------------------------------------------
+
+    fig.canvas.draw()
+
+    # ---------------------------------------------------------
+    # Individual panel colorbars
+    # ---------------------------------------------------------
+
+    for mappable, ax, label, ticks in mappables:
+        _add_colorbar(
+            mappable,
+            ax,
+            label=label,
+            ticks=ticks
+        )
+
+    return fig, axes
 
 __all__ = [
     "FIELD_STYLES",
     "make_money_figure",
+    "make_four_panel_money_figure",
+    "make_three_panel_money_figure",
     "add_circle_to_axes",
     "add_arrow_to_axis",
     "add_box_to_axis",
