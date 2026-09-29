@@ -26,7 +26,7 @@ OUTPUT_DIR = PROJECT_ROOT / "data" / "coherence"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 TIME_START = np.datetime64("2020-02-01")
-TIME_END = np.datetime64("2021-03-01")  # exclusive
+TIME_END = np.datetime64("2021-02-01")  # exclusive
 
 DECORRELATION_HOURS = 24 * 7
 
@@ -37,6 +37,7 @@ def open_run(name):
     ds = xr.open_zarr(
         INPUT_DIR / f"{name}.zarr",
         chunks={},
+        consolidated=False,
     )
 
     return ds.sel(
