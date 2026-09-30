@@ -3,6 +3,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
+def wavenumber_formatter(k, pos):
+
+    if k <= 0:
+        return ""
+
+    scale_km = 1 / k
+
+    return f"1/{scale_km:g}"
+
 def plot_spectra_2panel(
     spectra_left,
     spectra_right,
@@ -829,3 +838,179 @@ def plot_coherence(
         ax.set_title(title)
 
     return fig, ax
+
+def plot_variance_lost(
+    datasets,
+    titles,
+    styles,
+    variable="cumulative_loss_percent",
+    xdim="kr",
+    figsize=(8, 6),
+    xlim=(1e-3, 1/25),
+    ylim=(-10, 70),
+    xlabel=r"k$_r$ [cpkm]",
+    ylabel="Variance lost [%]",
+    legend=True,
+):
+    """
+    Plot variance loss for multiple datasets side-by-side.
+
+    Parameters
+    ----------
+    datasets : list of xr.Dataset
+        Datasets containing variance-loss results.
+
+    titles : list of str
+        Panel titles corresponding to each dataset.
+
+    styles : dict
+        Plotting styles keyed by experiment name.
+
+    variable : str, default="cumulative_loss_percent"
+        Dataset variable to plot.
+
+    xdim : str, default="kr"
+        Wavenumber dimension.
+
+    figsize : tuple, default=(8, 6)
+        Figure size.
+
+    xlim : tuple, default=(1e-3, 1/25)
+        X-axis limits.
+
+    ylim : tuple, default=(-10, 70)
+        Y-axis limits.
+
+    xlabel : str
+        Shared x-axis label.
+
+    ylabel : str
+        Shared y-axis label.
+
+    wavelength_formatter : callable, optional
+        Formatter function for the x-axis.
+
+    legend : bool, default=True
+        Whether to show the legend on the first panel.
+
+    Returns
+    -------
+    fig, axes
+    """
+
+    n = len(datasets)
+
+    fig, axes = plt.subplots(
+        1,
+        n,
+        figsize=figsize,
+        sharex=True,
+        sharey=True,
+    )
+
+    # Ensure axes is iterable if n == 1
+    if n == 1:
+        axes = [axes]
+
+    for i, (ax, ds, title) in enumerate(
+        zip(axes, datasets, titles)
+    ):
+
+        for experiment in ds.experiment.values:
+
+            da = ds[variable].sel(
+                experiment=experiment
+            )
+
+            ax.plot(
+                da[xdim],
+                da,
+                label=experiment,
+                **styles[experiment],
+            )
+
+        ax.set_title(
+            title,
+            fontsize=13,
+        )
+
+        ax.text(
+            0.98,
+            0.98,
+            f"({chr(97 + i)})",
+            transform=ax.transAxes,
+            ha="right",
+            va="top",
+            fontweight="bold",
+            fontsize=18,
+        )
+
+        if legend and i == 0:
+            ax.legend(
+                loc="upper left",
+                frameon=True,
+                framealpha=1.0,
+                facecolor="white",
+                edgecolor="black",
+            )
+
+        ax.set_xscale("log")
+        ax.set_xlim(*xlim)
+        ax.set_ylim(*ylim)
+
+        ax.axhline(
+            0,
+            color="k",
+            linewidth=1,
+            linestyle="--",
+        )
+
+        ax.xaxis.set_major_formatter(
+            FuncFormatter(wavenumber_formatter)
+        )
+
+        ax.grid(
+            True,
+            which="both",
+            linestyle="--",
+            alpha=0.35,
+        )
+
+        ax.tick_params(
+            axis="both",
+            which="major",
+            labelsize=11,
+        )
+
+    fig.subplots_adjust(
+        left=0.13,
+        bottom=0.13,
+        wspace=0.16,
+    )
+
+    fig.text(
+        0.54,
+        0.02,
+        xlabel,
+        ha="center",
+        va="center",
+        fontsize=13,
+        fontweight="bold",
+    )
+
+    fig.text(
+        0.04,
+        0.52,
+        ylabel,
+        ha="center",
+        va="center",
+        rotation="vertical",
+        fontsize=13,
+        fontweight="bold",
+    )
+
+    plt.tight_layout(
+        rect=[0.04, 0.04, 1, 1]
+    )
+
+    return fig, axes
