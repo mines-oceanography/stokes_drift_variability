@@ -1014,3 +1014,432 @@ def plot_variance_lost(
     )
 
     return fig, axes
+
+def plot_universal_spectra(
+    spectra,
+    coord="kr",
+    title=None,
+    slopes=None,
+    figsize=(4, 6),
+    xlim=None,
+    ylim=None,
+    slope_length_decades=0.5,
+    slope_anchor_x=None,
+    slope_anchor_y=None,
+    xlab=None,
+    ylab="Spectral Density",
+    reciprocal_ticks=None,
+    dpi=100,
+):
+    """
+    Plot one or more spectra on log-log axes.
+
+    Parameters
+    ----------
+    spectra : dict
+        Dictionary of plotting instructions.
+
+        `data` may be either:
+            - an xr.DataArray containing the spectrum, or
+            - an xr.Dataset returned by CI(), containing:
+                spectrum
+                CI_low
+                CI_high
+
+    coord : str
+        Name of the spectral coordinate/dimension.
+        Examples:
+            "kr"   -> spatial wavenumber
+            "freq" -> frequency
+
+    title : str or None
+        Figure title.
+
+    slopes : list of float or None
+        Reference slopes, such as [-3, -3.5, -4].
+
+    figsize : tuple
+        Figure size.
+
+    xlim, ylim : tuple or None
+        Axis limits.
+
+    slope_length_decades : float
+        Horizontal length of slope-reference lines in log10 space.
+
+    slope_anchor_x, slope_anchor_y : float or None
+        Starting point for the first slope line.
+
+    xlab : str or None
+        X-axis label. If None, inferred from coordinate attributes when possible.
+
+    ylab : str
+        Default y-axis label if no long_name attribute is available.
+
+    reciprocal_ticks : bool or None
+        Whether to display x ticks as reciprocals
+        (e.g. 0.001 -> 1/1000).
+
+        If None:
+            True  when coord == "kr"
+            False otherwise.
+    """
+
+    fig, ax = plt.subplots(
+        figsize=figsize,
+        dpi=dpi,
+    )
+
+    first_data = None
+    first_coord = None
+
+    # ------------------------------------------------------------
+    # Default reciprocal behavior
+    # ------------------------------------------------------------
+
+    if reciprocal_ticks is None:
+        reciprocal_ticks = (coord == "kr")
+
+    # ------------------------------------------------------------
+    # Plot spectra
+    # ------------------------------------------------------------
+
+    for name, settings in spectra.items():
+
+        data = settings["data"]
+
+        # --------------------------------------------------------
+        # Data can either be:
+        #   DataArray -> spectrum directly
+        #   Dataset   -> output from CI()
+        # --------------------------------------------------------
+
+        if isinstance(data, xr.Dataset):
+
+            da = data["spectrum"]
+            CI_low = data.get("CI_low")
+            CI_high = data.get("CI_high")
+
+        else:
+
+            da = data
+            CI_low = None
+            CI_high = None
+
+        # Remove any singleton dimensions
+        da = da.squeeze(drop=True)
+
+        if coord not in da.coords:
+            raise ValueError(
+                f"Coordinate '{coord}' not found in spectrum '{name}'. "
+                f"Available coordinates: {list(da.coords)}"
+            )
+
+        if da.dims != (coord,):
+            raise ValueError(
+                f"Spectrum '{name}' must be one-dimensional along "
+                f"'{coord}', but has dimensions {da.dims}."
+            )
+
+        # --------------------------------------------------------
+        # Align spectrum and confidence intervals
+        # --------------------------------------------------------
+
+        if CI_low is not None and CI_high is not None:
+
+            CI_low = CI_low.squeeze(drop=True)
+            CI_high = CI_high.squeeze(drop=True)
+
+            da, CI_low, CI_high = xr.align(
+                da,
+                CI_low,
+                CI_high,
+                join="inner",
+            )
+
+        # --------------------------------------------------------
+        # Compute before boolean indexing
+        #
+        # Plotting requires the actual values anyway. Doing this
+        # here prevents Xarray from trying to use a Dask-backed
+        # boolean array with drop=True.
+        # --------------------------------------------------------
+
+        da = da.compute()
+
+        if CI_low is not None:
+            CI_low = CI_low.compute()
+
+        if CI_high is not None:
+            CI_high = CI_high.compute()
+
+        x = da[coord].compute()
+
+        # --------------------------------------------------------
+        # Store first spectrum for automatic labels
+        # --------------------------------------------------------
+
+        if first_data is None:
+            first_data = da
+            first_coord = x
+
+        # --------------------------------------------------------
+        # Remove invalid values for log plotting
+        # --------------------------------------------------------
+
+        valid = (
+            np.isfinite(x)
+            & np.isfinite(da)
+            & (x > 0)
+            & (da > 0)
+        )
+
+        x_plot = x.where(
+            valid,
+            drop=True,
+        )
+
+        da_plot = da.where(
+            valid,
+            drop=True,
+        )
+
+        color = settings.get("color")
+
+        # --------------------------------------------------------
+        # Optional confidence interval
+        # --------------------------------------------------------
+
+        if (
+            settings.get("plot_CI", False)
+            and CI_low is not None
+            and CI_high is not None
+        ):
+
+            ci_valid = (
+                valid
+                & np.isfinite(CI_low)
+                & np.isfinite(CI_high)
+                & (CI_low > 0)
+                & (CI_high > 0)
+            )
+
+            x_CI_plot = x.where(
+                ci_valid,
+                drop=True,
+            )
+
+            CI_low_plot = CI_low.where(
+                ci_valid,
+                drop=True,
+            )
+
+            CI_high_plot = CI_high.where(
+                ci_valid,
+                drop=True,
+            )
+
+            ax.fill_between(
+                x_CI_plot.values,
+                CI_low_plot.values,
+                CI_high_plot.values,
+                color=color,
+                alpha=settings.get("CI_alpha", 0.2),
+                linewidth=0,
+                zorder=7,
+            )
+
+        # --------------------------------------------------------
+        # Spectrum
+        # --------------------------------------------------------
+
+        ax.loglog(
+            x_plot.values,
+            da_plot.values,
+            color=color,
+            linestyle=settings.get("linestyle", "-"),
+            linewidth=settings.get("linewidth", 1.5),
+            label=settings.get("label", name),
+            alpha=settings.get("alpha", 1),
+            zorder=8,
+        )
+
+    # ------------------------------------------------------------
+    # Axis labels
+    # ------------------------------------------------------------
+
+    if xlab is not None:
+
+        ax.set_xlabel(xlab)
+
+    elif first_coord is not None:
+
+        coord_long_name = first_coord.attrs.get(
+            "long_name",
+            coord,
+        )
+
+        coord_units = first_coord.attrs.get(
+            "units",
+            "",
+        )
+
+        if coord_units:
+            ax.set_xlabel(
+                f"{coord_long_name} [{coord_units}]"
+            )
+        else:
+            ax.set_xlabel(coord_long_name)
+
+    if first_data is not None:
+
+        units = first_data.attrs.get(
+            "units",
+            "",
+        )
+
+        long_name = first_data.attrs.get(
+            "long_name",
+            ylab,
+        )
+
+        if units:
+            ax.set_ylabel(
+                f"{long_name} [{units}]"
+            )
+        else:
+            ax.set_ylabel(long_name)
+
+    # ------------------------------------------------------------
+    # Title / grid / limits
+    # ------------------------------------------------------------
+
+    if title is not None:
+        ax.set_title(title)
+
+    ax.grid(
+        True,
+        which="both",
+        linestyle="--",
+        linewidth=0.7,
+        alpha=0.5,
+        color="lightgrey",
+    )
+
+    if xlim is not None:
+        ax.set_xlim(xlim)
+
+    if ylim is not None:
+        ax.set_ylim(ylim)
+
+    # ------------------------------------------------------------
+    # Optional reciprocal x-axis ticks
+    # ------------------------------------------------------------
+
+    if reciprocal_ticks:
+
+        def reciprocal_formatter(x, pos):
+
+            if x <= 0:
+                return ""
+
+            denominator = 1 / x
+
+            if np.isclose(
+                denominator,
+                round(denominator),
+            ):
+                denominator = int(
+                    round(denominator)
+                )
+
+            return rf"$1/{denominator:g}$"
+
+        ax.xaxis.set_major_formatter(
+            FuncFormatter(
+                reciprocal_formatter
+            )
+        )
+
+    # Draw first so axis limits are known
+    fig.canvas.draw()
+
+    # ------------------------------------------------------------
+    # Reference slopes
+    # ------------------------------------------------------------
+
+    if slopes:
+
+        xmin, xmax = ax.get_xlim()
+        ymin, ymax = ax.get_ylim()
+
+        if slope_anchor_x is None:
+
+            slope_anchor_x = 10 ** (
+                np.log10(xmin)
+                + 0.55
+                * (
+                    np.log10(xmax)
+                    - np.log10(xmin)
+                )
+            )
+
+        if slope_anchor_y is None:
+
+            slope_anchor_y = 10 ** (
+                np.log10(ymin)
+                + 0.7
+                * (
+                    np.log10(ymax)
+                    - np.log10(ymin)
+                )
+            )
+
+        x1 = slope_anchor_x
+        x2 = (
+            x1
+            * 10**slope_length_decades
+        )
+
+        for i, slope in enumerate(slopes):
+
+            y1 = (
+                slope_anchor_y
+                / (3**i)
+            )
+
+            y2 = (
+                y1
+                * (x2 / x1) ** slope
+            )
+
+            ax.loglog(
+                [x1, x2],
+                [y1, y2],
+                color="0.35",
+                linestyle="-",
+                linewidth=1,
+            )
+
+            ax.text(
+                x2 * 1.05,
+                y2,
+                rf"$k^{{{slope:g}}}$",
+                color="0.35",
+                va="center",
+                fontsize=10,
+            )
+
+    # ------------------------------------------------------------
+    # Legend
+    # ------------------------------------------------------------
+
+    ax.legend(
+        loc="lower left",
+        frameon=True,
+        framealpha=1.0,
+        facecolor="white",
+        edgecolor="black",
+    )
+
+    return fig, ax
