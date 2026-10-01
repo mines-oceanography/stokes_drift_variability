@@ -260,12 +260,12 @@ def main():
 
         print("Keeping positive frequencies only...")
 
-        Su = Su.where(
+        Su = 2 * Su.where(
             Su["freq_time"] > 0,
             drop=True,
         )
 
-        Sv = Sv.where(
+        Sv = 2 * Sv.where(
             Sv["freq_time"] > 0,
             drop=True,
         )
